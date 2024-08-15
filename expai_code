@@ -1,0 +1,113 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, roc_auc_score
+from xgboost import XGBClassifier
+from imblearn.over_sampling import SMOTE
+import shap
+import matplotlib.pyplot as plt
+
+# Load the dataset
+url = 'https://raw.githubusercontent.com/jbrownlee/Datasets/master/pima-indians-diabetes.data.csv'
+column_names = ['Pregnancies', 'Glucose', 'BloodPressure', 'SkinThickness', 'Insulin', 'BMI', 'DiabetesPedigreeFunction', 'Age', 'Outcome']
+df = pd.read_csv(url, names=column_names)
+
+# Separate features and target
+X = df.drop('Outcome', axis=1)
+y = df['Outcome']
+
+# Split data into training and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+# --------------------------------------------
+# 1. Hyperparameter Tuning with Random Forest
+# --------------------------------------------
+
+# Define the parameter grid for Random Forest
+param_grid = {
+    'n_estimators': [100, 200],
+    'max_depth': [None, 10, 20],
+    'min_samples_split': [2, 5],
+    'min_samples_leaf': [1, 2],
+    'bootstrap': [True, False]
+}
+
+# Initialize GridSearch
+grid_search = GridSearchCV(estimator=RandomForestClassifier(), param_grid=param_grid, cv=3, n_jobs=-1, verbose=2)
+
+# Fit the grid search to the data
+grid_search.fit(X_train, y_train)
+
+# Get the best parameters and model
+best_model = grid_search.best_estimator_
+
+# Predict and evaluate the best model
+y_pred = best_model.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+roc_auc = roc_auc_score(y_test, y_pred)
+
+print(f'Best Model Accuracy: {accuracy:.2f}')
+print(f'Best Model ROC-AUC: {roc_auc:.2f}')
+
+# Initialize SHAP Explainer for the best model
+explainer = shap.TreeExplainer(best_model)
+shap_values = explainer.shap_values(X_test)
+
+# Plot SHAP summary
+shap.summary_plot(shap_values, X_test, feature_names=X_test.columns)
+plt.savefig('shap_summary_plot_tuned.png')  # Save the plot
+
+# ------------------------
+# 2. Using XGBoost
+# ------------------------
+
+# Train an XGBoost model
+xgb_model = XGBClassifier(random_state=42)
+xgb_model.fit(X_train, y_train)
+
+# Predict and evaluate the XGBoost model
+y_pred = xgb_model.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+roc_auc = roc_auc_score(y_test, y_pred)
+
+print(f'XGBoost Accuracy: {accuracy:.2f}')
+print(f'XGBoost ROC-AUC: {roc_auc:.2f}')
+
+# Initialize SHAP Explainer for XGBoost model
+explainer = shap.TreeExplainer(xgb_model)
+shap_values = explainer.shap_values(X_test)
+
+# Plot SHAP summary for XGBoost
+shap.summary_plot(shap_values, X_test, feature_names=X_test.columns)
+plt.savefig('shap_summary_plot_xgboost.png')  # Save the plot
+
+# -------------------------------------------
+# 3. Data Balancing with SMOTE and Random Forest
+# -------------------------------------------
+
+# Apply SMOTE to balance the dataset
+smote = SMOTE(random_state=42)
+X_resampled, y_resampled = smote.fit_resample(X, y)
+
+# Split the resampled data
+X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.3, random_state=42)
+
+# Train a Random Forest model on the resampled data
+rf_model_smote = RandomForestClassifier(n_estimators=100, random_state=42)
+rf_model_smote.fit(X_train, y_train)
+
+# Predict and evaluate the model
+y_pred = rf_model_smote.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+roc_auc = roc_auc_score(y_test, y_pred)
+
+print(f'SMOTE Random Forest Accuracy: {accuracy:.2f}')
+print(f'SMOTE Random Forest ROC-AUC: {roc_auc:.2f}')
+
+# Initialize SHAP Explainer for SMOTE model
+explainer = shap.TreeExplainer(rf_model_smote)
+shap_values = explainer.shap_values(X_test)
+
+# Plot SHAP summary for SMOTE model
+shap.summary_plot(shap_values, X_test, feature_names=X_test.columns)
+plt.savefig('shap_summary_plot_smote.png')  # Save the plot
